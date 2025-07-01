@@ -7,12 +7,14 @@ import { RoomsController } from './rooms/rooms.controller';
 import { FilesController } from './files/files.controller';
 import { HealthController } from './health/health.controller';
 import { PostgresTtlService } from './ttl/postgres_ttl.service';
+import { WorkspaceController } from './workspace/workspace.controller';
+import { WorkspaceService } from './workspace/workspace.service';
 
 const logger = new Logger('AppModule');
 
 const buildProviders = () => {
   const ttlProvider = addTtlProvider();
-  const providers: any[] = [StorageService];
+  const providers: any[] = [StorageService, WorkspaceService];
   if (ttlProvider) {
     providers.push(ttlProvider);
   }
@@ -33,6 +35,7 @@ const addTtlProvider = () => {
     RoomsController,
     FilesController,
     HealthController,
+    WorkspaceController,
   ],
   providers: buildProviders(),
 })
