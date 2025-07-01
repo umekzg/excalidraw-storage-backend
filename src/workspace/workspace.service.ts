@@ -47,6 +47,13 @@ export class WorkspaceService {
     return /^[a-zA-Z0-9_-]{1,12}$/.test(sceneId);
   }
 
+  private bufferToString(data: any): string | null {
+    if (!data) return null;
+    if (typeof data === 'string') return data;
+    if (Buffer.isBuffer(data)) return data.toString('utf8');
+    return String(data);
+  }
+
   async saveScene(
     userId: string,
     sceneId: string,
@@ -63,8 +70,20 @@ export class WorkspaceService {
     const userMetaKey = this.getUserMetaKey(userId);
 
     // Check if scene already exists
-    const existingScene = await this.storageService.get(sceneKey, StorageNamespace.SCENES);
-    const isUpdate = !!existingScene;
+    const existingSceneData = await this.storageService.get(sceneKey, StorageNamespace.SCENES);
+    let existingCreated = now;
+    
+    if (existingSceneData) {
+      try {
+        const existingSceneStr = this.bufferToString(existingSceneData);
+        if (existingSceneStr) {
+          const existingScene = JSON.parse(existingSceneStr) as SavedScene;
+          existingCreated = existingScene.created;
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to parse existing scene ${sceneId}`, error);
+      }
+    }
 
     // Save scene data
     const scene: SavedScene = {
@@ -73,7 +92,7 @@ export class WorkspaceService {
       name: name,
       encryptedData: encryptedData,
       encryptionKey: encryptionKey,
-      created: isUpdate ? (existingScene as SavedScene).created : now,
+      created: existingCreated,
       modified: now,
     };
 
@@ -97,7 +116,7 @@ export class WorkspaceService {
 
     await this.storageService.set(userMetaKey, JSON.stringify(updatedMeta), StorageNamespace.SETTINGS);
 
-    this.logger.log(`Saved scene ${sceneId} for user ${userId} (${isUpdate ? 'updated' : 'created'})`);
+    this.logger.log(`Saved scene ${sceneId} for user ${userId} (${existingSceneData ? 'updated' : 'created'})`);
   }
 
   async getUserScenes(userId: string): Promise<SceneMetadata[]> {
@@ -113,7 +132,10 @@ export class WorkspaceService {
     }
 
     try {
-      const scenes = JSON.parse(metaData as string) as SceneMetadata[];
+      const metaStr = this.bufferToString(metaData);
+      if (!metaStr) return [];
+      
+      const scenes = JSON.parse(metaStr) as SceneMetadata[];
       return scenes.sort((a, b) => b.modified - a.modified);
     } catch (error) {
       this.logger.error(`Failed to parse user metadata for ${userId}`, error);
@@ -134,7 +156,10 @@ export class WorkspaceService {
     }
 
     try {
-      const scene = JSON.parse(sceneData as string) as SavedScene;
+      const sceneStr = this.bufferToString(sceneData);
+      if (!sceneStr) return null;
+      
+      const scene = JSON.parse(sceneStr) as SavedScene;
       return scene.encryptedData;
     } catch (error) {
       this.logger.error(`Failed to parse scene data for ${sceneId}`, error);
